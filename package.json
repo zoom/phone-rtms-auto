@@ -13,8 +13,7 @@
     "logs:frontend": "docker-compose logs -f frontend",
     "build": "docker-compose build",
     "rebuild": "docker-compose down -v && docker-compose build && docker-compose up",
-    "clean": "docker-compose down -v",
-    "clean:all": "docker-compose down -v && docker system prune -f",
+    "clean:data": "node -e \"const fs=require('fs'),p=require('path'),d='rtms/data';fs.existsSync(d)&&fs.readdirSync(d).forEach(f=>fs.rmSync(p.join(d,f),{recursive:true,force:true}))\"",
     "health": "curl http://localhost:3001/health",
     "ngrok": "ngrok http 3001",
     "ngrok:rtms": "ngrok http 3002"

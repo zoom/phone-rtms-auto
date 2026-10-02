@@ -65,6 +65,8 @@ services:
     container_name: zp-rtms
     environment:
       - RTMS_PORT=3002
+      - BACKEND_INTERNAL_URL=http://backend:3001
+      - SESSION_SECRET=${SESSION_SECRET}
       - RTMS_ZOOM_CLIENT_ID=${RTMS_ZOOM_CLIENT_ID:-${ZOOM_APP_CLIENT_ID}}
       - RTMS_ZOOM_CLIENT_SECRET=${RTMS_ZOOM_CLIENT_SECRET:-${ZOOM_APP_CLIENT_SECRET}}
     volumes:

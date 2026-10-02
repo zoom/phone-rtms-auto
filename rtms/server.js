@@ -2,7 +2,10 @@ const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const WebSocket = require('ws');
-const { createAudioHelper } = require('./audioHelper');
+const { createAudioHelper, recoverOrphanedAudio } = require('./audioHelper');
+const { createTranscriptHelper } = require('./transcriptHelper');
+const { createKeywordDetector } = require('./keywordDetector');
+const { notify } = require('./eventNotifier');
 
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
@@ -42,6 +45,7 @@ function handleRTMSStop(streamId, reason = 'stopped by Zoom') {
   session.stopped = true;
   sessions.delete(streamId);
   session.audioHelper?.close();
+  session.transcriptHelper?.close();
   for (const socket of [session.audio, session.transcript, session.signaling]) {
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, reason);
   }
@@ -95,18 +99,21 @@ function connectToMediaWebSocket(mediaUrl, session, mediaType) {
       send(media, { msg_type: 13, timestamp: message.timestamp }); // KEEP_ALIVE_RESP
     }else if (mediaType === 8 && message.msg_type === 17) { // MEDIA_DATA_TRANSCRIPT
       console.log('message media', message)
-      session.audioHelper.writeTranscript(message.content);
+      session.transcriptHelper.writeTranscript(message.content);
+      for (const event of session.keywordDetector.process(message.content)) notify(session, event);
       console.log('RTMS transcript:', JSON.stringify({
         call_id: session.call_id,
         streamId: session.streamId,
         content: message.content
       }));
     } else if (mediaType === 1 && message.msg_type === 14) { // MEDIA_DATA_AUDIO
-      session.audioHelper.writeAudio(message.content);
+      if (!message.content?.data) return;
+      const audioBuffer = Buffer.from(message.content.data, 'base64');
+      session.audioHelper.writeAudio(audioBuffer, message.content.channel_id);
       session.audioChunkCount++;
 
       if (session.audioChunkCount % 100 === 0) {
-        console.log(`🎵 Audio chunks: ${session.audioChunkCount} (call_id: ${session.call_id})`);
+        console.log(`🎵 Audio chunks: ${session.audioChunkCount} (channel_id: ${message.content.channel_id})`);
       }
     }
   });
@@ -187,6 +194,8 @@ function handleRTMSStart(payload) {
     transcript: null,
     audioChunkCount: 0,
     audioHelper: createAudioHelper(call_id, streamId),
+    transcriptHelper: createTranscriptHelper(call_id, streamId),
+    keywordDetector: createKeywordDetector(),
     stopped: false
   };
   sessions.set(streamId, session);
@@ -221,8 +230,11 @@ const server = app.listen(PORT, () => {
 async function shutdown() {
   const activeSessions = [...sessions.entries()];
   for (const [streamId] of activeSessions) handleRTMSStop(streamId, 'server shutting down');
-  await Promise.all(activeSessions.map(([, session]) => session.audioHelper?.close()));
+  await Promise.all(activeSessions.flatMap(([, session]) => [session.audioHelper?.close(), session.transcriptHelper?.close()]));
   server.close(() => process.exit(0));
 }
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
+process.once('SIGUSR2', shutdown); // nodemon restart
+
+recoverOrphanedAudio().catch((error) => console.error('Audio recovery failed:', error.message));

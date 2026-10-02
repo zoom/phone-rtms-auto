@@ -193,7 +193,7 @@ app.get('/api/auth/callback', async (req, res) => {
   }
 });
 
-// SSE clients waiting for AI call summary ID
+// SSE clients receiving keyword/prompt events
 const sseClients = new Set();
 
 // SSE endpoint - frontend connects here to receive real-time events
@@ -208,6 +208,24 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => {
     sseClients.delete(res);
   });
+});
+
+// Internal endpoint: the RTMS service posts keyword/prompt events here; relayed to the UI over SSE.
+// This server is exposed publicly, so the shared token is required.
+app.post('/internal/rtms-events', (req, res) => {
+  const expected = process.env.SESSION_SECRET;
+  const provided = req.get('x-internal-token') || '';
+  const valid = expected
+    && provided.length === expected.length
+    && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  if (!valid) return res.status(401).json({ message: 'Unauthorized.' });
+
+  const { type, call_id, ruleId, keyword, prompt, text, keywords } = req.body || {};
+  if (type !== 'prompt' && type !== 'keywords') return res.status(400).json({ message: 'Unknown event type.' });
+
+  const data = JSON.stringify({ type, callId: call_id, ruleId, keyword, prompt, text, keywords });
+  for (const client of sseClients) client.write(`data: ${data}\n\n`);
+  res.status(200).json({ received: true });
 });
 
 // Webhook endpoint for Zoom events
@@ -231,17 +249,6 @@ app.post('/api/webhooks/zoom', (req, res, next) => {
     } catch (error) {
       console.error(`Failed to forward ${event} to RTMS service:`, error.message);
       return res.status(502).json({ message: 'RTMS service unavailable.' });
-    }
-  }
-
-  if (event === 'phone.ai_call_summary_changed') {
-    const callId = payload?.object?.call_id;
-    const aiCallSummaryId = payload?.object?.ai_call_summary_id;
-    if (aiCallSummaryId) {
-      console.log(`Call ID:[${callId}] AI call summary available: ${aiCallSummaryId}`);
-      for (const client of sseClients) {
-        client.write(`data: ${JSON.stringify({ aiCallSummaryId })}\n\n`);
-      }
     }
   }
 

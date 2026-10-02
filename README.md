@@ -1,16 +1,14 @@
 # Zoom App for Phone
 
-A Zoom App that brings real-time call context and AI-generated summaries directly into the Zoom Phone client. This app enables users to:
+A Zoom App that brings real-time call context and live keyword prompts directly into the Zoom Phone client. This app enables users to:
 - Access live call metadata inside the Zoom client
-- Automatically receive AI summary IDs via secure webhooks when calls complete
-- Retrieve full AI-generated summaries on demand
-- Streamline documentation and post-call workflows without leaving Zoom
+- See live keywords and suggested agent prompts as the call transcript streams in
+- Stay in the Zoom client throughout the call
 
 ## Features
 
 - Real-time Zoom Phone call context (call ID, status, duration)
-- Automatic AI summary ID retrieval via webhook
-- On-demand AI call summary fetching
+- Live keyword detection and rolling prompts from the call transcript
 - Secure OAuth 2.0 authentication
 - Automatic token refresh
 - Per-user Redis-based token storage
@@ -67,7 +65,7 @@ ZOOM_REDIRECT_URL=https://abc123.ngrok-free.app/api/auth/callback
 
 **Features → Access**
 1. Copy your app's Secret Token and add it to your `.env` file as `ZOOM_SECRET_TOKEN`
-2. Create an Event subscription, give it a name, and select **Call Summary Changed**
+2. Create an Event subscription, give it a name, and select the Phone RTMS events (see below)
 3. Set the Event notification endpoint URL to:
    `https://abc123.ngrok-free.app/api/webhooks/zoom`
 4. Save the changes
@@ -87,7 +85,6 @@ ZOOM_REDIRECT_URL=https://abc123.ngrok-free.app/api/auth/callback
 **Scopes**
 
 Add the required scopes:
-- `phone:read:ai_call_summary`
 - `phone:read:call_log`
 - `user:read:user`
 
@@ -98,6 +95,23 @@ docker-compose up
 ```
 
 The app will be available at: `http://localhost:3001`
+
+### Keyword detection and automated prompts
+
+The RTMS service scans each incoming transcript message in real time. Rules and
+extraction settings live in `rtms/keywords.json`:
+
+- **Prompts:** when a rule's keyword/phrase is heard, its `prompt` is pushed to the
+  Zoom App panel (per-rule `cooldownSeconds` prevents repeats).
+- **Live keywords:** the most frequent non-stopword terms on the call are extracted
+  from the transcript as it arrives and shown as chips.
+
+Events travel RTMS → backend `POST /internal/rtms-events` → SSE (`/api/events`) → UI.
+Because the backend is public through ngrok, that endpoint requires the shared
+`SESSION_SECRET` from `.env` (sent in the `x-internal-token` header by the RTMS service).
+The RTMS service must receive the same `SESSION_SECRET` as the backend.
+
+If it is missing, matches are only logged by the RTMS service.
 
 ### Configure and run Zoom Phone RTMS
 
@@ -169,8 +183,7 @@ After authorizing, Zoom will redirect back to the app and open it inside the Zoo
 
 1. Open the app within the Zoom Phone client during a call
 2. View live call context (call ID, status, timestamps)
-3. The AI call summary ID is populated automatically via webhook when a call ends
-4. Click **Get AI Summary** to fetch the summary for the current call
+3. Watch the **Keyword Detection** section for live keywords and a rolling list of suggested prompts
 
 ## Troubleshooting
 
@@ -179,9 +192,9 @@ After authorizing, Zoom will redirect back to the app and open it inside the Zoo
 - Verify the ngrok URL is set in both `.env` and Zoom Marketplace
 - Check the webhook URL matches: `https://your-ngrok-url.ngrok-free.app/api/webhooks/zoom`
 
-**AI summary ID not populating?**
-- Make sure you've subscribed to phone webhook events in Zoom Marketplace
-- Check backend logs: `docker-compose logs -f backend`
+**Prompts not appearing?**
+- Confirm `SESSION_SECRET` is set for both the backend and rtms services
+- Check RTMS logs: `docker-compose logs -f rtms`
 
 **API errors / Not authenticated?**
 - Ensure you've completed the OAuth flow

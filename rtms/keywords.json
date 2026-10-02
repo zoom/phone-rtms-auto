@@ -1,0 +1,40 @@
+{
+  "rules": [
+    {
+      "id": "cancellation",
+      "keywords": ["cancel", "cancellation", "close my account", "terminate", "switch providers"],
+      "prompt": "Customer may be considering cancelling. Acknowledge their frustration, ask what's driving it, and offer retention options before processing.",
+      "cooldownSeconds": 10
+    },
+    {
+      "id": "billing",
+      "keywords": ["refund", "overcharged", "charged twice", "billing", "invoice", "payment"],
+      "prompt": "Billing topic detected. Verify the account holder, then pull up recent invoices and payment history.",
+      "cooldownSeconds": 10
+    },
+    {
+      "id": "escalation",
+      "keywords": ["escalation", "escalate", "supervisor", "manager", "speak to someone else", "complaint", "unacceptable"],
+      "prompt": "Customer is asking for escalation. Stay calm, summarize the issue back to them, and follow the escalation policy.",
+      "cooldownSeconds": 10
+    },
+    {
+      "id": "outage",
+      "keywords": ["not working", "outage", "is down", "went down", "can't connect", "no service", "dropped"],
+      "prompt": "Possible service issue. Check the status page for known outages and collect device/location details.",
+      "cooldownSeconds": 10
+    },
+    {
+      "id": "recording-consent",
+      "keywords": ["don't record", "stop recording", "hang up now"],
+      "prompt": "Recording concern raised. Confirm the customer's preference and follow the recording-consent procedure.",
+      "cooldownSeconds": 10
+    }
+  ],
+  "extraction": {
+    "topN": 8,
+    "minLength": 4,
+    "minCount": 2,
+    "emitIntervalMs": 2000
+  }
+}

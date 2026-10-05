@@ -98,9 +98,10 @@ function connectToMediaWebSocket(mediaUrl, session, mediaType) {
     } else if (message.msg_type === 12) { // KEEP_ALIVE_REQ
       send(media, { msg_type: 13, timestamp: message.timestamp }); // KEEP_ALIVE_RESP
     }else if (mediaType === 8 && message.msg_type === 17) { // MEDIA_DATA_TRANSCRIPT
-      console.log('message media', message)
-      session.transcriptHelper.writeTranscript(message.content);
       for (const event of session.keywordDetector.process(message.content)) notify(session, event);
+      const text = message.content?.data?.trim();
+      if (text) notify(session, { type: 'transcript', speaker: session.transcriptHelper.speakerFor(message.content), text });
+      session.transcriptHelper.writeTranscript(message.content);
       console.log('RTMS transcript:', JSON.stringify({
         call_id: session.call_id,
         streamId: session.streamId,

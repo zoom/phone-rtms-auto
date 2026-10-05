@@ -38,14 +38,21 @@ function createTranscriptHelper(callId, streamId) {
   const speakers = new Map(); // channel_id -> "Speaker N"
   let firstStartTime;
 
+  // Prefer the name Zoom provides; otherwise number speakers by channel in order of first appearance.
+  function speakerFor(content) {
+    if (content.user_name) return content.user_name;
+    if (!speakers.has(content.channel_id)) speakers.set(content.channel_id, `Speaker ${speakers.size + 1}`);
+    return speakers.get(content.channel_id);
+  }
+
   return {
     transcriptFile,
+    speakerFor,
     writeTranscript(content) {
       const text = content?.data?.trim();
       if (!text) return;
 
-      if (!speakers.has(content.channel_id)) speakers.set(content.channel_id, `Speaker ${speakers.size + 1}`);
-      const speaker = speakers.get(content.channel_id);
+      const speaker = speakerFor(content);
 
       if (firstStartTime === undefined && content.start_time) firstStartTime = content.start_time;
       const offset = content.start_time && firstStartTime !== undefined

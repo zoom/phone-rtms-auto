@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import zoomSdk from '@zoom/appssdk';
 import './App.css';
 
@@ -9,6 +9,8 @@ function App() {
   const [phoneContext, setPhoneContext] = useState(null);
   const [prompts, setPrompts] = useState([]);
   const [liveKeywords, setLiveKeywords] = useState([]);
+  const [transcript, setTranscript] = useState([]);
+  const transcriptEndRef = useRef(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -43,6 +45,8 @@ function App() {
           setPrompts(prev => prev.filter(p => p.id !== id));
         }, PROMPT_LIFETIME_MS);
         timers.add(timer);
+      } else if (event.type === 'transcript') {
+        setTranscript(prev => [...prev, { id: nextPromptId++, speaker: event.speaker, text: event.text }]);
       } else if (event.type === 'keywords') {
         setLiveKeywords(event.keywords);
       }
@@ -57,6 +61,11 @@ function App() {
       timers.forEach(clearTimeout);
     };
   }, []);
+
+  // Keep the newest line in view
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [transcript]);
 
   // Initialize Zoom SDK
   useEffect(() => {
@@ -136,6 +145,22 @@ function App() {
         )}
 
         
+
+        <div className="section">
+          <h3>Live Transcript</h3>
+          {transcript.length === 0 ? (
+            <p className="status-value">Listening for speech...</p>
+          ) : (
+            <div className="transcript-feed">
+              {transcript.map((line) => (
+                <div key={line.id} className="transcript-line">
+                  <span className="transcript-speaker">{line.speaker}:</span> {line.text}
+                </div>
+              ))}
+              <div ref={transcriptEndRef} />
+            </div>
+          )}
+        </div>
 
         <div className="section">
           <h3>Keyword Detection</h3>

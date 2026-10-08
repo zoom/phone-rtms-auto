@@ -5,6 +5,7 @@ const WebSocket = require('ws');
 const { createAudioHelper, recoverOrphanedAudio } = require('./audioHelper');
 const { createTranscriptHelper } = require('./transcriptHelper');
 const { createKeywordDetector } = require('./keywordDetector');
+const { createSummarizer } = require('./summarizer');
 const { notify } = require('./eventNotifier');
 
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
@@ -46,6 +47,7 @@ function handleRTMSStop(streamId, reason = 'stopped by Zoom') {
   sessions.delete(streamId);
   session.audioHelper?.close();
   session.transcriptHelper?.close();
+  session.summarizer?.stop();
   for (const socket of [session.audio, session.transcript, session.signaling]) {
     if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, reason);
   }
@@ -99,6 +101,7 @@ function connectToMediaWebSocket(mediaUrl, session, mediaType) {
       send(media, { msg_type: 13, timestamp: message.timestamp }); // KEEP_ALIVE_RESP
     }else if (mediaType === 8 && message.msg_type === 17) { // MEDIA_DATA_TRANSCRIPT
       for (const event of session.keywordDetector.process(message.content)) notify(session, event);
+      session.summarizer.process(message.content);
       const text = message.content?.data?.trim();
       if (text) notify(session, { type: 'transcript', speaker: session.transcriptHelper.speakerFor(message.content), text });
       session.transcriptHelper.writeTranscript(message.content);
@@ -197,9 +200,11 @@ function handleRTMSStart(payload) {
     audioHelper: createAudioHelper(call_id, streamId),
     transcriptHelper: createTranscriptHelper(call_id, streamId),
     keywordDetector: createKeywordDetector(),
+    summarizer: createSummarizer(),
     stopped: false
   };
   sessions.set(streamId, session);
+  session.summarizer.start((event) => notify(session, event));
   connectToSignalingWebSocket(server_urls, session);
 }
 

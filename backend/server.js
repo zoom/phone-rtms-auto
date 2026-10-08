@@ -221,10 +221,10 @@ app.post('/internal/rtms-events', (req, res) => {
     && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
   if (!valid) return res.status(401).json({ message: 'Unauthorized.' });
 
-  const { type, call_id, ruleId, keyword, prompt, text, keywords, speaker } = req.body || {};
-  if (type !== 'prompt' && type !== 'keywords' && type !== 'transcript') return res.status(400).json({ message: 'Unknown event type.' });
+  const { type, call_id, ruleId, keyword, prompt, text, keywords, speaker, summary } = req.body || {};
+  if (type !== 'prompt' && type !== 'keywords' && type !== 'transcript' && type !== 'summary') return res.status(400).json({ message: 'Unknown event type.' });
 
-  const data = JSON.stringify({ type, callId: call_id, ruleId, keyword, prompt, text, keywords, speaker });
+  const data = JSON.stringify({ type, callId: call_id, ruleId, keyword, prompt, text, keywords, speaker, summary });
   for (const client of sseClients) client.write(`data: ${data}\n\n`);
   res.status(200).json({ received: true });
 });

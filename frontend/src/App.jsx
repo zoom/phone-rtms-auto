@@ -10,6 +10,7 @@ function App() {
   const [prompts, setPrompts] = useState([]);
   const [liveKeywords, setLiveKeywords] = useState([]);
   const [transcript, setTranscript] = useState([]);
+  const [summary, setSummary] = useState('');
   const transcriptEndRef = useRef(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -47,6 +48,8 @@ function App() {
         timers.add(timer);
       } else if (event.type === 'transcript') {
         setTranscript(prev => [...prev, { id: nextPromptId++, speaker: event.speaker, text: event.text }]);
+      } else if (event.type === 'summary') {
+        setSummary(event.summary);
       } else if (event.type === 'keywords') {
         setLiveKeywords(event.keywords);
       }
@@ -100,8 +103,8 @@ function App() {
     <div className="App">
       <div className="container">
         <div className="header">
-          <h1>Zoom App for Phone</h1>
-          <p className="subtitle">Live keyword detection and prompts</p>
+          <h2>Zoom App for Phone</h2>
+          <p className="subtitle">Live transcript, summaries, and keyword detection</p>
         </div>
 
         {error && (
@@ -123,13 +126,9 @@ function App() {
               <span className="status-label">Call Id:</span>
               <span className="status-value">{phoneContext.callId ?? 'Not available'}</span>
             </div>
-            <div className="status-item">
-              <span className="status-label">Call Status:</span>
-              <span className="status-value">{phoneContext.callStatus ?? 'Not available'}</span>
-            </div>
             {phoneContext.callObject && (
               <>
-            
+        
                  <div className="status-item">
                   <span className="status-label">Ringing Start Time:</span>
                   <span className="status-value">{phoneContext.callObject.ringingStartTime ?? 'Not available'}</span>
@@ -190,6 +189,17 @@ function App() {
             </div>
           )}
         </div>
+
+        <div className="section">
+          <h3>Call Summary</h3>
+          {summary ? (
+            <div className="summary-text">{summary}</div>
+          ) : (
+            <p className="status-value">Waiting for summary...</p>
+          )}
+        </div>
+
+        
 
         <div className="footer">
         </div>

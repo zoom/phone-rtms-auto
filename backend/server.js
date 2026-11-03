@@ -231,7 +231,7 @@ app.post('/internal/rtms-events', (req, res) => {
 
 // Webhook endpoint for Zoom events
 app.post('/api/webhooks/zoom', (req, res, next) => {
-  console.log(`Zoom webhook received: ${req.body?.event || 'unknown'}`);
+  console.log(`LOOK HERE !!!!!!!!! ${req.body?.event || 'unknown'}`);
   next();
 }, validateZoomWebhook, async (req, res) => {
 

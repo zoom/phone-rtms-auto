@@ -1,14 +1,18 @@
-# Zoom App for Phone
+# Zoom Phone RTMS Sample App
 
-A Zoom App that brings real-time call context and live keyword prompts directly into the Zoom Phone client. This app enables users to:
+This Zoom App brings real-time call context, call transcript, call summary and live keyword prompts directly into the Zoom Phone client. This app enables users to:
 - Access live call metadata inside the Zoom client
-- See live keywords and suggested agent prompts as the call transcript streams in
+- View the call transcript as it streams in
+- See a call summary every 30 seconds
+- Get live keywords and suggested agent prompts as the conversation unfolds
 - Stay in the Zoom client throughout the call
 
 ## Features
 
-- Real-time Zoom Phone call context (call ID, status, duration)
-- Live keyword detection and rolling prompts from the call transcript
+- Real-time Zoom Phone call context 
+- Live call transcript streaming
+- Rolling call summary updated every 30 seconds
+- Live keyword detection and suggested agent prompts
 - Secure OAuth 2.0 authentication
 - Automatic token refresh
 - Per-user Redis-based token storage
@@ -28,8 +32,8 @@ A Zoom App that brings real-time call context and live keyword prompts directly 
 
 In your terminal:
 ```bash
-git clone https://github.com/elisalevet/zoomapp-phone.git
-cd zoomapp-phone
+git clone <your-repo-url>
+cd ZP-rtms-auto
 ```
 
 Create your environment file:
@@ -37,58 +41,70 @@ Create your environment file:
 cp .env.example .env
 ```
 
-Start ngrok:
+Start ngrok to expose the backend:
 ```bash
 ngrok http 3001
 ```
 
-Update your `.env` file with your ngrok URL:
+Copy the HTTPS forwarding URL and update your `.env` file:
 ```bash
-PUBLIC_URL=https://abc123.ngrok-free.app
-ZOOM_REDIRECT_URL=https://abc123.ngrok-free.app/api/auth/callback
+PUBLIC_URL=https://your-ngrok-url.ngrok-free.app
+ZOOM_REDIRECT_URL=https://your-ngrok-url.ngrok-free.app/api/auth/callback
 ```
 
-### 2. Create and Configure Your Zoom App
+Keep ngrok running. If the URL changes, update `.env` and the Zoom Marketplace settings.
+
+### 2. Create Your Zoom App
 
 1. Go to the [Zoom App Marketplace](https://marketplace.zoom.us/)
-2. Click **Develop → Build App → General App**
-3. Name your app
+2. Click **Develop → Build App**
+3. Select **General App** as the app type (note: the app must be user-managed)
+4. Fill in basic information:
+   - **App name:** Your app name
+   - **Redirect URL for OAuth:** `https://your-ngrok-url.ngrok-free.app/api/auth/callback`
 
-#### Basic Information and App Credentials
-1. Select **User-managed app**
-2. Copy the client ID and client secret into your `.env` file:
-   - `ZOOM_APP_CLIENT_ID`
-   - `ZOOM_APP_CLIENT_SECRET`
-3. Add your OAuth redirect URL: `https://abc123.ngrok-free.app/api/auth/callback`
+### 3. Configure Event Subscriptions
 
-#### Zoom App Configuration
+Under **Access**:
+1. Turn on **Event Subscription** 
+2. Select **Webhook** as the delivery method and give the subscription a name.
+3. Subscribe to these Phone RTMS events:
+   - RTMS started in Zoom Phone  
+   - RTMS stopped in Zoom Phone
+   - RTMS interrupted in Zoom Phone
+4. Set the notification URL to: `https://your-ngrok-url.ngrok-free.app/api/webhooks/zoom`
 
-**Features → Access**
-1. Copy your app's Secret Token and add it to your `.env` file as `ZOOM_SECRET_TOKEN`
-2. Create an Event subscription, give it a name, and select the Phone RTMS events (see below)
-3. Set the Event notification endpoint URL to:
-   `https://abc123.ngrok-free.app/api/webhooks/zoom`
-4. Save the changes
+### 4. Surface your App
 
-**Features → Surface**
-1. Add your Home URL: `https://abc123.ngrok-free.app/api/home`
-2. Add Domain Allow list:
-   - `abc123.ngrok-free.app`
-   - `appssdk.zoom.us`
-3. Select **Phone** as the product this app works with
-4. Enable **Zoom Apps SDK** and add the following APIs:
-   - `getPhoneContext`
-   - `getRunningContext`
+This sample is built to run as a Surface app in the Zoom client. Under **Surface**:
 
-> Note: You can add more APIs or events as needed for your integration.
+   - Add your **Home URL:** `https://your-ngrok-url.ngrok-free.app/api/home`
+   - Add Domain Allow list:
+     - `your-ngrok-url.ngrok-free.app.app`
+     - `appssdk.zoom.us`
+   - Select **Phone** as the product this app works with
+   - Enable **Zoom Apps SDK** and add the following APIs:
+     - `getPhoneContext`
+     - `getRunningContext`
 
-**Scopes**
+### 5. Add Scopes
 
-Add the required scopes:
-- `phone:read:call_log`
+Under **Scopes**, add:
+- `phone:read:voice_call_audio`
+- `phone:read:voice_call_transcript`
+- `rtms:read:phone_rtms_stopped`
+- `rtms:read:phone_rtms_interrupted`
+- `rtms:read:phone_rtms_started`
 - `user:read:user`
 
-### 3. Start the Application
+### 6. Configure App Credentials
+
+1. In the **App Credentials** tab, copy the Client ID and Client Secret into `ZOOM_APP_CLIENT_ID` and `ZOOM_APP_CLIENT_SECRET`.
+2. In the **Access** menu, copy the Secret Token into `ZOOM_SECRET_TOKEN`.
+3. Set `SESSION_SECRET` to a random string. Use the same value for the backend and RTMS services.
+
+
+### 7. Start the Services
 
 ```bash
 docker-compose up
@@ -96,161 +112,124 @@ docker-compose up
 
 The app will be available at: `http://localhost:3001`
 
-### Keyword detection and automated prompts
+### 8. Authorize the App
 
-The RTMS service scans each incoming transcript message in real time. Rules and
-extraction settings live in `rtms/keywords.json`:
+Open the login URL in a browser to start the OAuth flow:
 
-- **Prompts:** when a rule's keyword/phrase is heard, its `prompt` is pushed to the
-  Zoom App panel (per-rule `cooldownSeconds` prevents repeats).
-- **Live keywords:** the most frequent non-stopword terms on the call are extracted
-  from the transcript as it arrives and shown as chips.
+```
+https://your-ngrok-url.ngrok-free.app/api/auth/login
+```
 
-Events travel RTMS → backend `POST /internal/rtms-events` → SSE (`/api/events`) → UI.
-Because the backend is public through ngrok, that endpoint requires the shared
-`SESSION_SECRET` from `.env` (sent in the `x-internal-token` header by the RTMS service).
-The RTMS service must receive the same `SESSION_SECRET` as the backend.
+After you authorize, Zoom redirects to `/api/auth/callback`, which stores your tokens in Redis. You can then open the app inside the Zoom client.
 
-If it is missing, matches are only logged by the RTMS service.
 
-### Configure and run Zoom Phone RTMS
+## Configure and Run Zoom Phone RTMS
 
-Follow these steps to start a Phone RTMS stream, receive its audio and transcript
-packets, and close the stream when the call ends.
+Follow these steps to start a Phone RTMS stream, receive audio and transcript packets, and close the stream when the call ends.
 
-1. **Enable RTMS for the Zoom Phone app/account.** In the Zoom App Marketplace,
-   configure the app and Phone RTMS access for both audio and transcripts. This
-   service expects both media types. Grant the RTMS media permissions available
-   for your app and account; the separate AI summary and call-log scopes in this
-   README are for the Zoom Phone UI flow, not RTMS media capture.
+1. **Enable RTMS for your app and account.** Configure the app for Phone RTMS access to both audio and transcripts. The RTMS service expects both media types. Grant the RTMS media permissions available for your app and account.
 
-2. **Subscribe to the Phone RTMS events.** In the app's event subscription, add
-   `phone.call_rtms_started` and `phone.call_rtms_stopped`. Set the notification
-   URL to `https://<public-host>/api/webhooks/zoom`. The backend validates Zoom's
-   webhook signature using the app's Secret Token, then forwards the event
-   payload to the internal RTMS service.
+2. **Confirm the webhook path.** Zoom sends `phone.call_rtms_started` and `phone.call_rtms_stopped` to `https://<public-host>/api/webhooks/zoom`. The backend validates the signature using `ZOOM_SECRET_TOKEN` and forwards the payload to the RTMS service.
 
-3. **Set credentials and secrets in `.env`.** The RTMS service uses the Zoom
-   Client ID and Client Secret to sign its WebSocket handshakes. Set
-   `RTMS_ZOOM_CLIENT_ID` and `RTMS_ZOOM_CLIENT_SECRET` only if RTMS uses a
-   different Zoom app; otherwise it uses `ZOOM_APP_CLIENT_ID` and
-   `ZOOM_APP_CLIENT_SECRET`. Also set `ZOOM_SECRET_TOKEN` for webhook validation
-   and `SESSION_SECRET` for the backend. The example file contains the remaining
-   local stack settings.
+3. **Start a Phone RTMS call.** Place or answer a call that starts RTMS for this app. The start event includes `call_id`, `rtms_stream_id`, and signaling `server_urls`. The RTMS service connects to the signaling URL, then opens separate audio and transcript media connections.
 
-4. **Expose the backend webhook and start the services.** Run `ngrok http 3001`,
-   use its HTTPS URL as the event notification URL from step 2, then run:
-
-   ```bash
-   docker compose up --build
-   ```
-
-   Only the backend needs a public URL. RTMS listens internally on port 3002;
-   Zoom does not connect directly to that port. The RTMS image includes FFmpeg
-   to create the WAV file when a stream stops.
-
-5. **Start a Phone RTMS call and confirm media arrives.** Place or answer a call
-   that starts RTMS for this app. Zoom sends a start event containing `call_id`,
-   `rtms_stream_id`, and signaling `server_urls`. The RTMS service connects to
-   the signaling URL, then opens the separate audio and transcript media
-   connections. Watch the services with:
+4. **Watch the logs:**
 
    ```bash
    docker compose logs -f backend rtms
    ```
 
-   The RTMS log reports audio progress every 100 audio packets and prints
-   transcript messages as they arrive. Audio packets are saved as a per-call
-   `.raw` file; transcripts are appended as JSON lines to
-   `rtms/data/transcripts/YYYY-MM-DD.txt`.
+   The RTMS log reports audio progress every 100 audio packets and prints transcript messages as they arrive.
 
-6. **Stop the stream.** End the call or otherwise trigger
-   `phone.call_rtms_stopped`. The backend forwards the stop payload, and RTMS
-   closes its media and signaling sockets. It keeps the `.raw` audio and creates
-   a 16 kHz mono `.wav` beside it. Audio and transcript files are under
-   `rtms/data/`, which is excluded from version control.
+5. **Stop the stream.** End the call or otherwise trigger `phone.call_rtms_stopped`. The backend forwards the event, and RTMS closes its sockets. Output files are written to `rtms/data/`:
+   - **Audio** is saved to `rtms/data/audio/<timestamp>_<callId>/`. Each speaker channel is written as a raw PCM file (`ch00_<channel>.raw`, `ch01_<channel>.raw`, and so on). When the call ends, these are combined into a single `<callId>.wav` in the same folder: 16 kHz, 16-bit, mono for one channel, or interleaved multi-channel for several. The RTMS image includes FFmpeg for this conversion.
+   - **Transcripts** are written to one plain-text file per call, `rtms/data/transcripts/<timestamp>_<callId>.txt`. Each line has the form `[mm:ss] Speaker: text`, where the time is the offset from the first message. The file starts with the call ID, stream ID, and start time. Speakers use the name Zoom provides, or `Speaker 1`, `Speaker 2`, and so on by channel.
 
-### 4. Authorize and Test
+`rtms/data/` is excluded from version control.
 
-Navigate to your login URL to begin the OAuth flow:
-```
-https://abc123.ngrok-free.app/api/auth/login
-```
+## Live Call Transcript
 
-After authorizing, Zoom will redirect back to the app and open it inside the Zoom client.
+The RTMS service streams each transcript message to the Zoom App panel as it arrives, labeled by speaker. It also writes the same lines to `rtms/data/transcripts/<timestamp>_<callId>.txt` with a `[mm:ss]` offset.
+
+## Keyword Detection and Prompts
+
+The RTMS service scans each transcript message in real time, using rules in `rtms/keywords.json`:
+
+- **Prompts:** When a rule's keyword or phrase appears, its prompt appears in the panel. `cooldownSeconds` prevents repeats.
+- **Live keywords:** The most frequent non-stopword terms appear as chips.
+
+## Call Summary
+
+Every 30 seconds, the RTMS service adds one bullet to the panel summarizing the transcript from that window, using its most repeated topic words and a representative sentence. Windows with no usable speech add nothing. Summaries are kept in memory for the call and are not saved to disk. Settings are in `rtms/summarizer.js`.
 
 ## Usage
 
-1. Open the app within the Zoom Phone client during a call
-2. View live call context (call ID, status, timestamps)
-3. Watch the **Keyword Detection** section for live keywords and a rolling list of suggested prompts
+1. Open the app in the Zoom Phone client during a call.
+2. Review the live call context (call ID, ringing and answer time).
+3. Follow the **Live Transcript** section for the call as it happens.
+4. Watch the **Keyword Detection** section for live keywords and suggested prompts.
+5. Check the **Call Summary** section for a new bullet every 30 seconds.
 
 ## Troubleshooting
 
-**Webhooks not working?**
-- Ensure ngrok is running
-- Verify the ngrok URL is set in both `.env` and Zoom Marketplace
-- Check the webhook URL matches: `https://your-ngrok-url.ngrok-free.app/api/webhooks/zoom`
+**Webhooks not arriving**
+- Confirm ngrok is running.
+- Make sure the ngrok URL matches in `.env` and in Zoom Marketplace.
+- Confirm the notification URL is `https://your-ngrok-url.ngrok-free.app/api/webhooks/zoom`.
 
-**Prompts not appearing?**
-- Confirm `SESSION_SECRET` is set for both the backend and rtms services
-- Check RTMS logs: `docker-compose logs -f rtms`
+**Prompts or keywords not appearing**
+- Confirm `SESSION_SECRET` is set and identical for the `backend` and `rtms` services.
+- Check RTMS logs: `docker compose logs -f rtms`
 
-**API errors / Not authenticated?**
-- Ensure you've completed the OAuth flow
-- View backend logs: `docker-compose logs -f backend`
-- If you see "Authentication expired", re-authenticate the application
+**"Not authenticated" or API errors**
+- Complete the OAuth flow at `/api/auth/login`.
+- Check backend logs: `docker compose logs -f backend`
+- If you see "Authentication expired," reauthorize the app.
 
-**Services not running?**
-- Check all containers: `docker-compose ps`
-- View logs: `docker-compose logs -f`
+**Services not running**
+- Check container status: `docker compose ps`
+- View all logs: `docker compose logs -f`
 
-## OAuth Authentication & Token Storage
+## OAuth Authentication and Token Storage
 
 The app uses OAuth 2.0 with automatic token refresh.
 
 ### How It Works
 
-1. **Initial Authentication**
-   - Install the app from Zoom Marketplace
-   - The OAuth flow opens in a new window/tab
-   - After authorizing, tokens are stored server-side in Redis keyed by user ID
-   - You'll be redirected back to the app
+1. **Initial authentication.** Open `/api/auth/login` in a browser, as described in [Getting Started](#8-authorize-the-app). After you authorize, tokens are stored server-side in Redis, keyed by user ID.
+2. **Why Redis?** Zoom Apps run in an iframe inside the Zoom client, and modern browsers block third-party cookies in iframes. Tokens are stored on the server instead, scoped per user.
+3. **Identifying the user.** The app gets the user ID from the Zoom Apps SDK context, then uses it to look up that user's tokens in Redis.
 
-2. **Why Redis Token Storage?**
-   - Zoom Apps run inside an iframe within the Zoom client
-   - Modern browsers block third-party cookies in iframes
-   - **Solution**: Tokens are stored in Redis on the server, scoped per user
-   - All API requests from the iframe use these Redis-stored tokens
+```
+OAuth callback → GET /users/me → Redis (key: "oauth:tokens:{userId}")
+                                          ↓
+Zoom App (iframe) → API request → look up tokens in Redis by userId
+```
 
-3. **Token Storage Architecture**
-   ```
-   OAuth Callback → fetch /users/me → Redis (key: "oauth:tokens:{userId}")
-                                              ↓
-   Zoom App (iframe) → API Request → Get Tokens from Redis by userId
-   ```
+### Automatic Token Refresh
 
-4. **Automatic Token Refresh**
-   - When an access token expires (401 error), the app automatically:
-     - Uses the refresh token to get a new access token
-     - Updates Redis with the new tokens
-     - Retries the failed request seamlessly
-   - No user interaction needed
+When an access token expires (a 401 response), the app:
 
-5. **Re-authentication**
-   - If the refresh token expires, you'll see a "Not authenticated" error
-   - Simply reinstall/reauthorize the app from Zoom Marketplace
+1. Uses the refresh token to get a new access token.
+2. Updates Redis with the new tokens.
+3. Retries the failed request.
+
+No user action is required.
+
+### Re-authentication
+
+If the refresh token expires, you'll see a "Not authenticated" error. Reinstall or reauthorize the app from the Zoom Marketplace.
 
 ## Production Security
 
-- **Do not store credentials in plain text `.env` files in production.**  Use a secrets manager. The .env file is for local development only and is git-ignored by default.
-- Review the Content Security Policy in `backend/middleware/security.js` before deploying 
-- Tokens are stored per user in Redis. Ensure your Redis instance is secured and not publicly accessible in production.
+- **Do not store credentials in plain-text `.env` files in production.** Use a secrets manager. The `.env` file is for local development only and is git-ignored by default.
+- Review the Content Security Policy in `backend/middleware/security.js` before deploying.
+- Tokens are stored per user in Redis. Secure your Redis instance and keep it off the public internet.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
 ## Support
 
-Find us in the [Zoom Developer Forum](https://devforum.zoom.us/) for support.
+Find us in the [Zoom Developer Forum](https://devforum.zoom.us/).

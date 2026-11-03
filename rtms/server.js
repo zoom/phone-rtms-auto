@@ -161,12 +161,15 @@ function connectToSignalingWebSocket(serverUrl, session) {
         console.error(`RTMS signaling handshake failed for ${streamId}:`, message.reason);
         return handleRTMSStop(streamId, 'signaling handshake failed');
       }
-      const mediaUrls = message.media_server?.server_urls || {};
-      if (!mediaUrls.audio || !mediaUrls.transcript) {
+      // server_urls values are comma-separated (e.g. "wss://...,srt://..."); keep only the wss link
+      const pickWssUrl = (urls) => String(urls || '').split(',').map(u => u.trim()).find(u => u.startsWith('wss://'));
+      const audioUrl = pickWssUrl(message.media_server?.server_urls?.audio);
+      const transcriptUrl = pickWssUrl(message.media_server?.server_urls?.transcript);
+      if (!audioUrl || !transcriptUrl) {
         return handleRTMSStop(streamId, 'audio or transcript stream unavailable');
       }
-      connectToMediaWebSocket(mediaUrls.audio, session, 1); // AUDIO
-      connectToMediaWebSocket(mediaUrls.transcript, session, 8); // TRANSCRIPT
+      connectToMediaWebSocket(audioUrl, session, 1); // AUDIO
+      connectToMediaWebSocket(transcriptUrl, session, 8); // TRANSCRIPT
     } else if (message.msg_type === 12) { // KEEP_ALIVE_REQ
       send(signaling, { msg_type: 13, timestamp: message.timestamp }); // KEEP_ALIVE_RESP
     } else if (message.msg_type === 6) {

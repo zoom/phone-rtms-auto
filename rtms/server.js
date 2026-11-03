@@ -173,7 +173,7 @@ function connectToSignalingWebSocket(serverUrl, session) {
     } else if (message.msg_type === 12) { // KEEP_ALIVE_REQ
       send(signaling, { msg_type: 13, timestamp: message.timestamp }); // KEEP_ALIVE_RESP
     } else if (message.msg_type === 6) {
-      console.log('EVENT CODE TEST', message)
+      console.log('EVENT CODE TEST', JSON.stringify(message, null, 2))
     }
   });
 

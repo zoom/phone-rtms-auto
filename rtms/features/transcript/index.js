@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const TRANSCRIPT_DIR = path.join(__dirname, 'data', 'transcripts');
+// Runtime output lives in rtms/data, which is gitignored.
+const TRANSCRIPT_DIR = path.join(__dirname, '..', '..', 'data', 'transcripts');
 
 function safeFileName(value) {
   return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');

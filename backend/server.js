@@ -231,7 +231,6 @@ app.post('/internal/rtms-events', (req, res) => {
 
 // Webhook endpoint for Zoom events
 app.post('/api/webhooks/zoom', (req, res, next) => {
-  console.log(`LOOK HERE !!!!!!!!! ${req.body?.event || 'unknown'}`);
   next();
 }, validateZoomWebhook, async (req, res) => {
 
@@ -244,9 +243,8 @@ app.post('/api/webhooks/zoom', (req, res, next) => {
   );
 
   if (event === 'phone.call_rtms_started' || event === 'phone.call_rtms_stopped') {
-    const action = event === 'phone.call_rtms_started' ? 'start' : 'stop';
     try {
-      await axios.post(`${RTMS_SERVER_URL}/internal/${action}`, { payload }, { timeout: 2000 });
+      await axios.post(RTMS_SERVER_URL, { event, payload }, { timeout: 2000 });
     } catch (error) {
       console.error(`Failed to forward ${event} to RTMS service:`, error.message);
       return res.status(502).json({ message: 'RTMS service unavailable.' });

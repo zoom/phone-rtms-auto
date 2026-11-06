@@ -1,16 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_PATH = path.join(__dirname, 'keywords.json');
+const { STOPWORDS } = require('../../lib/stopwords');
 
-const STOPWORDS = new Set((
-  'about above after again against all also and any are because been before being below between both but can ' +
-  'could did does doing down during each few for from further had has have having her here hers him his how ' +
-  'into its itself just like more most need not off once only other our out over own same she should some ' +
-  'such than that the their them then there these they this those through too under until very was were what ' +
-  'when where which while who whom why will with would you your yours yeah okay thank thanks hello please ' +
-  'right well know think want going gonna really actually something anything'
-).split(' '));
+const CONFIG_PATH = path.join(__dirname, 'keywords.json');
 
 function loadConfig() {
   return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));

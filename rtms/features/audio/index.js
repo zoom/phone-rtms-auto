@@ -5,7 +5,8 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 
-const DATA_DIR = path.join(__dirname, 'data');
+// Runtime output lives in rtms/data, which is gitignored.
+const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 
 // RTMS audio is 16 kHz, 16-bit little-endian PCM, one stream per channel_id.
 const SAMPLE_RATE = 16000;

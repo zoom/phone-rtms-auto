@@ -1,18 +1,11 @@
+const { STOPWORDS } = require('../../lib/stopwords');
+
 const SUMMARY_INTERVAL_MS = 30 * 1000; // how often a new summary line is added
 const MAX_TOPICS = 3; // topic words shown per summary line
 const MAX_QUOTE_CHARS = 90; // the key sentence is cut to about this length
 const RECENT_WINDOW = 6; // lines compared for duplicate detection
 const MIN_SENTENCE_WORDS = 4; // shorter sentences ("Okay.") are never picked as the key sentence
 const MIN_TERM_LENGTH = 4; // shorter words are ignored when finding topics
-
-const STOPWORDS = new Set((
-  'about above after again against all also and any are because been before being below between both but can ' +
-  'could did does doing down during each few for from further had has have having her here hers him his how ' +
-  'into its itself just like more most need not off once only other our out over own same she should some ' +
-  'such than that the their them then there these they this those through too under until very was were what ' +
-  'when where which while who whom why will with would you your yours yeah okay thank thanks hello please ' +
-  'right well know think want going gonna really actually something anything'
-).split(' '));
 
 function terms(sentence) {
   return (sentence.toLowerCase().match(/[a-z][a-z'-]*/g) || [])

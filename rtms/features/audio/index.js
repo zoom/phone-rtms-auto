@@ -109,10 +109,8 @@ async function recoverOrphanedAudio() {
     const files = fs.readdirSync(dirPath);
     if (files.some((file) => file.endsWith('.wav'))) continue;
 
-    // ch00_, ch01_... prefixes keep the original channel order.
-    const rawFiles = files.filter((file) => file.endsWith('.raw')).sort()
-      .map((file) => path.join(dirPath, file))
-      .filter((file) => fs.statSync(file).size > 0);
+    // Sorted file names keep a stable channel order when interleaving.
+    const rawFiles = listRawFiles(dirPath);
     if (rawFiles.length === 0) continue;
 
     const wavFile = path.join(dirPath, `${dir.slice(dir.indexOf('_') + 1)}.wav`);
@@ -125,25 +123,48 @@ async function recoverOrphanedAudio() {
   }
 }
 
+// Folder names are `<timestamp>_<call_id>`; the call_id is the segment after the timestamp.
+function findCallDir(callId) {
+  const audioRoot = path.join(DATA_DIR, 'audio');
+  if (!fs.existsSync(audioRoot)) return null;
+  const match = fs.readdirSync(audioRoot).find((entry) => entry.split('_')[1] === safeFileName(callId));
+  return match ? path.join(audioRoot, match) : null;
+}
+
+// Every .raw file in a call folder, in sorted (stable channel) order, skipping empty and temp files.
+function listRawFiles(dir) {
+  return fs.readdirSync(dir)
+    .filter((file) => file.endsWith('.raw') && !file.endsWith('.interleaved.raw'))
+    .sort()
+    .map((file) => path.join(dir, file))
+    .filter((file) => fs.statSync(file).size > 0);
+}
+
+// One folder per call_id: a new RTMS stream for the same call appends to the existing folder.
 function createAudioHelper(callId, streamId) {
-  const createdAt = new Date();
-  const sessionName = `${createdAt.toISOString().replace(/[:.]/g, '-')}_${safeFileName(callId)}`;
-  const audioDir = path.join(DATA_DIR, 'audio', sessionName);
-  fs.mkdirSync(audioDir, { recursive: true });
+  let audioDir = findCallDir(callId);
+  if (!audioDir) {
+    const createdAt = new Date();
+    const sessionName = `${createdAt.toISOString().replace(/[:.]/g, '-')}_${safeFileName(callId)}`;
+    audioDir = path.join(DATA_DIR, 'audio', sessionName);
+    fs.mkdirSync(audioDir, { recursive: true });
+  }
 
   const wavFile = path.join(audioDir, `${safeFileName(callId)}.wav`);
   const channels = new Map(); // channel_id -> { rawFile, stream }
 
-  function getChannel(channelId) {
+  // One raw file per Zoom channel_id. Reuses the existing file for that channel if the call already has one.
+  function getChannel(channelId, name) {
     let channel = channels.get(channelId);
     if (!channel) {
-      const index = String(channels.size).padStart(2, '0');
-      const rawFile = path.join(audioDir, `ch${index}_${safeFileName(channelId)}.raw`);
+      const suffix = `_${safeFileName(channelId)}.raw`;
+      const existing = fs.readdirSync(audioDir).find((file) => file.endsWith(suffix));
+      const rawFile = path.join(audioDir, existing || `${safeFileName(name)}${suffix}`);
       const stream = fs.createWriteStream(rawFile, { flags: 'a' });
       stream.on('error', (error) => console.error(`Audio file error for ${streamId} (${channelId}):`, error.message));
       channel = { rawFile, stream };
       channels.set(channelId, channel);
-      console.log(`RTMS audio channel ${index} opened for ${streamId}: ${channelId}`);
+      console.log(`RTMS audio opened for ${streamId}: ${name} (${channelId})`);
     }
     return channel;
   }
@@ -152,8 +173,8 @@ function createAudioHelper(callId, streamId) {
 
   return {
     wavFile,
-    writeAudio(audioBuffer, channelId = 'unknown') {
-      getChannel(channelId).stream.write(audioBuffer);
+    writeAudio(audioBuffer, channelId, name = 'Unknown') {
+      getChannel(channelId, name).stream.write(audioBuffer);
     },
     close() {
       if (closePromise) return closePromise;
@@ -161,7 +182,7 @@ function createAudioHelper(callId, streamId) {
       const entries = [...channels.values()];
       closePromise = Promise.all(entries.map(({ stream }) => new Promise((resolve) => stream.end(resolve))))
         .then(async () => {
-          const rawFiles = entries.map(({ rawFile }) => rawFile).filter((file) => fs.statSync(file).size > 0);
+          const rawFiles = listRawFiles(audioDir);
           if (rawFiles.length === 0) return console.warn(`No audio received for ${streamId}; skipping WAV`);
           await saveWav(rawFiles, wavFile);
           console.log(`RTMS WAV saved for ${streamId} (${rawFiles.length} channel(s)): ${wavFile}`);

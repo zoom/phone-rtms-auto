@@ -19,6 +19,9 @@ function handleRTMSStart(payload, connect) {
   if (sessions.has(rtms_stream_id)) return;
 
   const streamId = rtms_stream_id;
+  // Payloads can carry suffixed ids (e.g. "06af..._1"); the base id before the first "_" identifies the call.
+  // The original call_id stays on the session because the signaling handshake signs it.
+  const baseCallId = String(call_id).split('_')[0];
   const session = {
     call_id,
     streamId,
@@ -26,8 +29,8 @@ function handleRTMSStart(payload, connect) {
     audio: null,
     transcript: null,
     audioChunkCount: 0,
-    audioHelper: createAudioHelper(call_id, streamId),
-    transcriptHelper: createTranscriptHelper(call_id, streamId),
+    audioHelper: createAudioHelper(baseCallId, streamId),
+    transcriptHelper: createTranscriptHelper(baseCallId, streamId),
     keywordDetector: createKeywordDetector(),
     summarizer: createSummarizer(),
     stopped: false

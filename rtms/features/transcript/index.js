@@ -16,44 +16,45 @@ function formatOffset(ms) {
   return `${minutes}:${seconds}`;
 }
 
-// Writes one readable transcript file per call:
-//   [00:03] Speaker 1: Hello!
+// File names are `<timestamp>_<call_id>.txt`; the call_id is the segment after the timestamp.
+function findTranscriptFile(callId) {
+  if (!fs.existsSync(TRANSCRIPT_DIR)) return null;
+  const match = fs.readdirSync(TRANSCRIPT_DIR)
+    .find((file) => file.split('_')[1]?.replace(/\.txt$/, '') === safeFileName(callId));
+  return match ? path.join(TRANSCRIPT_DIR, match) : null;
+}
+
+// Writes one readable transcript file per call_id:
+//   [00:03] Rehema Armorer: Hello!
+// A new RTMS stream for the same call appends to the existing file.
 function createTranscriptHelper(callId, streamId) {
   const createdAt = new Date();
   fs.mkdirSync(TRANSCRIPT_DIR, { recursive: true });
 
-  const stamp = createdAt.toISOString().replace(/[:.]/g, '-');
-  const transcriptFile = path.join(TRANSCRIPT_DIR, `${stamp}_${safeFileName(callId)}.txt`);
+  const existingFile = findTranscriptFile(callId);
+  const transcriptFile = existingFile
+    || path.join(TRANSCRIPT_DIR, `${createdAt.toISOString().replace(/[:.]/g, '-')}_${safeFileName(callId)}.txt`);
   const stream = fs.createWriteStream(transcriptFile, { flags: 'a' });
   stream.on('error', (error) => console.error(`Transcript file error for ${streamId}:`, error.message));
 
-  stream.write([
-    `Call ID:   ${callId}`,
-    `Stream ID: ${streamId}`,
-    `Started:   ${createdAt.toISOString()}`,
-    '-'.repeat(60),
-    '',
-    ''
-  ].join('\n'));
-
-  const speakers = new Map(); // channel_id -> "Speaker N"
-  let firstStartTime;
-
-  // Prefer the name Zoom provides; otherwise number speakers by channel in order of first appearance.
-  function speakerFor(content) {
-    if (content.user_name) return content.user_name;
-    if (!speakers.has(content.channel_id)) speakers.set(content.channel_id, `Speaker ${speakers.size + 1}`);
-    return speakers.get(content.channel_id);
+  if (!existingFile) {
+    stream.write([
+      `Call ID:   ${callId}`,
+      `Stream ID: ${streamId}`,
+      `Started:   ${createdAt.toISOString()}`,
+      '-'.repeat(60),
+      '',
+      ''
+    ].join('\n'));
   }
+
+  let firstStartTime;
 
   return {
     transcriptFile,
-    speakerFor,
-    writeTranscript(content) {
+    writeTranscript(content, speaker = 'Unknown') {
       const text = content?.data?.trim();
       if (!text) return;
-
-      const speaker = speakerFor(content);
 
       if (firstStartTime === undefined && content.start_time) firstStartTime = content.start_time;
       const offset = content.start_time && firstStartTime !== undefined

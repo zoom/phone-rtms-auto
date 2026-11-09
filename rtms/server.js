@@ -10,7 +10,7 @@ const { sessions, handleRTMSStart, handleRTMSStop } = require('./lib/rtmsSession
 
 const app = express();
 const PORT = 3002;
-const AUDIO_SEND_RATE_MS = 20;
+const AUDIO_SEND_RATE_MS = 20; // 20ms is the minimum send rate for Zoom RTMS audio streams
 
 app.use(express.json());
 
@@ -60,6 +60,18 @@ function connectToSignalingWebSocket(serverUrl, session) {
       send(signaling, { msg_type: 13, timestamp: message.timestamp }); // KEEP_ALIVE_RESP
     } else if (message.msg_type === 6) {
       console.log('EVENT CODE TEST', JSON.stringify(message, null, 2))
+      // event_code arrives as a number (3000) in the payload, so compare as a string
+      if (String(message.event?.event_code) === '3000') {
+        session.host_id = message.event.host_channel_id;
+        // keyed by channel_id, which is the only unique id Zoom sends per participant
+        session.participants = Object.fromEntries(
+          (message.event.participants || []).map((p) => [
+            p.channel_id,
+            { id: p.channel_id, name: p.name }
+          ])
+        );
+        console.log(`Saved ${Object.keys(session.participants).length} participants for ${streamId}`);
+      }
     }
   });
 
@@ -118,17 +130,20 @@ function connectToMediaWebSocket(mediaUrl, session, mediaType) {
       for (const event of session.keywordDetector.process(message.content)) notify(session, event);
       session.summarizer.process(message.content);
       const text = message.content?.data?.trim();
-      if (text) notify(session, { type: 'transcript', speaker: session.transcriptHelper.speakerFor(message.content), text });
-      session.transcriptHelper.writeTranscript(message.content);
+      const speaker = session.participants?.[message.content.channel_id]?.name;
+      if (text) notify(session, { type: 'transcript', speaker, text });
+      session.transcriptHelper.writeTranscript(message.content, speaker);
       console.log('RTMS transcript:', JSON.stringify({
         call_id: session.call_id,
         streamId: session.streamId,
+        speaker,
         content: message.content
       }));
     } else if (mediaType === 1 && message.msg_type === 14) { // MEDIA_DATA_AUDIO
       if (!message.content?.data) return;
       const audioBuffer = Buffer.from(message.content.data, 'base64');
-      session.audioHelper.writeAudio(audioBuffer, message.content.channel_id);
+      const { channel_id } = message.content;
+      session.audioHelper.writeAudio(audioBuffer, channel_id, session.participants?.[channel_id]?.name);
       session.audioChunkCount++;
 
       if (session.audioChunkCount % 100 === 0) {

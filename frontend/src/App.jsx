@@ -5,6 +5,18 @@ import './App.css';
 const PROMPT_LIFETIME_MS = 10000;
 let nextPromptId = 0;
 
+// Each speaker gets the next colour the first time they appear, so
+// neighbouring speakers in the transcript are easy to tell apart.
+const SPEAKER_COLORS = ['#2d7ff9', '#ef5da8', '#20b58c', '#a56eff', '#f0913a', '#22b8cf'];
+const speakerColorMap = new Map();
+
+function speakerColor(name) {
+  if (!speakerColorMap.has(name)) {
+    speakerColorMap.set(name, SPEAKER_COLORS[speakerColorMap.size % SPEAKER_COLORS.length]);
+  }
+  return speakerColorMap.get(name);
+}
+
 function App() {
   const [phoneContext, setPhoneContext] = useState(null);
   const [prompts, setPrompts] = useState([]);
@@ -121,25 +133,15 @@ function App() {
 
         {phoneContext && (
           <div className="section">
-            <h3>Phone Context</h3>
+            <h3>Call Information</h3>
             <div className="status-item">
               <span className="status-label">Call Id:</span>
-              <span className="status-value">{phoneContext.callId ?? 'Not available'}</span>
+              <span className="status-value">{phoneContext.callId ?? ''}</span>
             </div>
-            {phoneContext.callObject && (
-              <>
-        
-                 <div className="status-item">
-                  <span className="status-label">Ringing Start Time:</span>
-                  <span className="status-value">{phoneContext.callObject.ringingStartTime ?? 'Not available'}</span>
-                </div>
-                <div className="status-item">
-                  <span className="status-label">Answer Start Time:</span>
-                  <span className="status-value">{phoneContext.callObject.answerStartTime ?? 'Not available'}</span>
-                </div>
-            
-              </>
-            )}
+            <div className="status-item">
+              <span className="status-label">Answer Start Time:</span>
+              <span className="status-value">{phoneContext.callObject?.answerStartTime ?? ''}</span>
+            </div>
           </div>
         )}
 
@@ -153,7 +155,7 @@ function App() {
             <div className="transcript-feed">
               {transcript.map((line) => (
                 <div key={line.id} className="transcript-line">
-                  <span className="transcript-speaker">{line.speaker}:</span> {line.text}
+                  <span className="transcript-speaker" style={{ color: speakerColor(line.speaker) }}>{line.speaker}:</span> {line.text}
                 </div>
               ))}
               <div ref={transcriptEndRef} />
@@ -175,7 +177,7 @@ function App() {
 
           <h4 className="prompt-heading">Live Prompts</h4>
           {prompts.length === 0 ? (
-            <p className="status-value">No active prompts. New ones appear here as keywords are heard.</p>
+            <p className="status-value">Waiting for keywords...</p>
           ) : (
             <div className="prompt-feed">
               {prompts.map((p) => (
